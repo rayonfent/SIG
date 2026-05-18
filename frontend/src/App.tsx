@@ -7,36 +7,37 @@ import { useRealtime } from "./hooks/useRealtime";
 import { AlertLevel, DetectionStatus, RealtimeSnapshot } from "./types";
 
 const statusMeta: Record<AlertLevel, { label: string; tone: string; action: string }> = {
-  NORMAL: { label: "Normal", tone: "normal", action: "Monitoring rutin. Sistem siaga." },
-  SUSPECT: { label: "Suspect", tone: "suspect", action: "Validasi sensor dan pantau tren." },
-  WASPADA: { label: "Waspada", tone: "waspada", action: "Siapkan tim dan komunikasi publik." },
-  SIAGA: { label: "Siaga", tone: "siaga", action: "Aktifkan posko dan siapkan evakuasi." },
-  AWAS: { label: "Awas", tone: "awas", action: "Evakuasi sekarang. Prioritaskan zona aman." }
+  NORMAL: { label: "Normal", tone: "normal", action: "Monitoring rutin berjalan normal." },
+  SUSPECT: { label: "Suspect", tone: "suspect", action: "Periksa anomali awal dan validasi data sensor." },
+  WASPADA: { label: "Waspada", tone: "waspada", action: "Aktifkan kesiapsiagaan tim lapangan." },
+  SIAGA: { label: "Siaga", tone: "siaga", action: "Aktifkan prosedur evakuasi parsial." },
+  AWAS: { label: "Awas", tone: "awas", action: "Evakuasi segera. Prioritaskan jalur hijau." }
 };
 
 function MetricCard({ label, value, helper, tone }: { label: string; value: string; helper: string; tone?: string }) {
   return (
-    <article className={`metric ${tone || ""}`}>
-      <div className="metric__label">{label}</div>
-      <div className="metric__value">{value}</div>
-      <div className="metric__helper">{helper}</div>
+    <article className={`metric-card ${tone || ""}`}>
+      <div className="metric-label">{label}</div>
+      <div className="metric-value">{value}</div>
+      <div className="metric-helper">{helper}</div>
     </article>
   );
 }
 
-function CommandSummary({ detection, mode }: { detection?: DetectionStatus; mode: string }) {
+function TopStatus({ detection, mode }: { detection?: DetectionStatus; mode: string }) {
   const level = detection?.level || "NORMAL";
   const meta = statusMeta[level];
   return (
-    <section className={`command-summary ${meta.tone}`}>
+    <section className={`top-status ${meta.tone}`}>
       <div>
-        <div className="panel__eyebrow">Incident Command Status</div>
+        <div className="kicker">Incident Command</div>
         <h2>{meta.label}</h2>
         <p>{meta.action}</p>
       </div>
-      <div className="command-summary__right">
-        <span>Realtime: {mode === "ws" ? "WebSocket aktif" : "Polling fallback"}</span>
+      <div className="status-meta">
+        <span>Realtime: {mode === "ws" ? "WebSocket" : "Polling fallback"}</span>
         <span>Lokasi: {detection?.locationName || "Panjang, Lampung"}</span>
+        <span>Update: {detection?.updatedAt ? new Date(detection.updatedAt).toLocaleTimeString() : "-"}</span>
       </div>
     </section>
   );
@@ -44,24 +45,24 @@ function CommandSummary({ detection, mode }: { detection?: DetectionStatus; mode
 
 function SensorTable({ sensors }: { sensors: DetectionStatus["sensors"] }) {
   return (
-    <section className="panel">
-      <div className="panel__header">
+    <section className="panel-card">
+      <header className="panel-head">
         <div>
-          <div className="panel__eyebrow">Telemetry</div>
-          <div className="panel__title">Sensor Muka Air</div>
+          <div className="kicker">Telemetry</div>
+          <h3>Status Sensor Muka Air</h3>
         </div>
-        <span className="panel__chip">{sensors.length} sensor</span>
-      </div>
+        <span className="badge-chip">{sensors.length} sensor</span>
+      </header>
       <div className="table-wrap">
-        <table className="table">
+        <table className="sensor-table">
           <thead>
             <tr>
               <th>Sensor</th>
               <th>Level</th>
               <th>Muka Air</th>
-              <th>Δ 3m</th>
+              <th>Delta 3m</th>
               <th>Rate</th>
-              <th>Z</th>
+              <th>Z-Score</th>
               <th>Quality</th>
             </tr>
           </thead>
@@ -72,7 +73,7 @@ function SensorTable({ sensors }: { sensors: DetectionStatus["sensors"] }) {
                   <strong>{sensor.sensor_name}</strong>
                   <span>{sensor.sensor_code}</span>
                 </td>
-                <td><span className={`badge ${sensor.level.toLowerCase()}`}>{sensor.level}</span></td>
+                <td><span className={`badge-level ${sensor.level.toLowerCase()}`}>{sensor.level}</span></td>
                 <td>{sensor.water_level_cm} cm</td>
                 <td>{sensor.delta_3m} cm</td>
                 <td>{sensor.rate_cm_per_minute} cm/m</td>
@@ -87,9 +88,10 @@ function SensorTable({ sensors }: { sensors: DetectionStatus["sensors"] }) {
   );
 }
 
-function ActionPanel({ snapshot, realtimeMode }: { snapshot: RealtimeSnapshot | null; realtimeMode: string }) {
+function OperationsRail({ snapshot, realtimeMode }: { snapshot: RealtimeSnapshot | null; realtimeMode: string }) {
   const [offset, setOffset] = useState(0);
   const [saving, setSaving] = useState(false);
+
   const recommended = useMemo(() => {
     const routes = snapshot?.map?.routes || [];
     const safeZones = snapshot?.map?.safeZones || [];
@@ -109,57 +111,57 @@ function ActionPanel({ snapshot, realtimeMode }: { snapshot: RealtimeSnapshot | 
   };
 
   return (
-    <section className="right-rail">
-      <div className="panel">
-        <div className="panel__eyebrow">Recommended Response</div>
-        <div className="panel__title">Apa yang harus dilakukan sekarang</div>
-        <div className="response-list">
-          <div><b>1</b><span>Monitor status AWAS/SIAGA dan confidence sensor.</span></div>
-          <div><b>2</b><span>Arahkan warga melalui rute terendah kepadatan.</span></div>
-          <div><b>3</b><span>Supervisor resolve alert hanya jika aman tervalidasi.</span></div>
-        </div>
-      </div>
-      <div className="panel" id="evakuasi">
-        <div className="panel__eyebrow">Evacuation</div>
-        <div className="panel__title">Rute Prioritas</div>
-        <div className="info-stack">
-          <span>Komunikasi: {realtimeMode === "ws" ? "Realtime" : "Polling fallback"}</span>
-          <span>Jalur: {recommended.route?.name || "Menunggu data"}</span>
+    <aside className="ops-rail" id="evakuasi">
+      <section className="panel-card">
+        <div className="kicker">Response Checklist</div>
+        <h3>Apa yang dilakukan sekarang</h3>
+        <ol className="checklist">
+          <li>Perhatikan status level dan confidence.</li>
+          <li>Arahkan warga ke jalur berkepadatan rendah.</li>
+          <li>Validasi kondisi lapangan sebelum resolve.</li>
+        </ol>
+      </section>
+      <section className="panel-card">
+        <div className="kicker">Evakuasi Direkomendasikan</div>
+        <h3>Rute dan Zona Aman</h3>
+        <div className="stack-lines">
+          <span>Kanal komunikasi: {realtimeMode === "ws" ? "Realtime" : "Polling 10 detik"}</span>
+          <span>Rute prioritas: {recommended.route?.name || "Menunggu data"}</span>
           <span>Kepadatan: {recommended.route?.density || 0}%</span>
           <span>Zona aman: {recommended.zone?.name || "Menunggu data"}</span>
         </div>
-      </div>
-      <div className="panel">
-        <div className="panel__eyebrow">Drill</div>
-        <div className="panel__title">Simulasi Muka Air</div>
-        <div className="sim">
-          <div className="sim__reading">{offset > 0 ? "+" : ""}{offset} cm</div>
-          <input min={-200} max={300} type="range" value={offset} onChange={(event) => setOffset(Number(event.target.value))} />
-          <button className="primary" onClick={() => sendSimulation(offset)} disabled={saving}>
+      </section>
+      <section className="panel-card">
+        <div className="kicker">Simulation Drill</div>
+        <h3>Uji skenario cepat</h3>
+        <div className="sim-box">
+          <div className="sim-value">{offset > 0 ? "+" : ""}{offset} cm</div>
+          <input type="range" min={-200} max={300} value={offset} onChange={(event) => setOffset(Number(event.target.value))} />
+          <button className="primary-btn" onClick={() => sendSimulation(offset)} disabled={saving}>
             {saving ? "Mengirim..." : "Jalankan Simulasi"}
           </button>
         </div>
-      </div>
-    </section>
+      </section>
+    </aside>
   );
 }
 
 function ModulePage({ active, snapshot, mode }: { active: string; snapshot: RealtimeSnapshot | null; mode: string }) {
   if (active === "Monitoring Peta") return <MapPanel data={snapshot?.map} />;
   if (active === "Deteksi & Alert" || active === "Status Perangkat") return <SensorTable sensors={snapshot?.detection?.sensors || []} />;
-  if (active === "Evakuasi" || active === "Simulasi & Drill") return <ActionPanel snapshot={snapshot} realtimeMode={mode} />;
+  if (active === "Evakuasi" || active === "Simulasi & Drill") return <OperationsRail snapshot={snapshot} realtimeMode={mode} />;
   return (
-    <section className="panel module-placeholder">
-      <div className="panel__eyebrow">Module Shell</div>
-      <div className="panel__title">{active}</div>
-      <p>Modul ini sudah tersedia dalam navigasi operasi. Data utama tetap sinkron dengan peta, sensor, alert, sirine, dan audit trail.</p>
+    <section className="panel-card module-placeholder">
+      <div className="kicker">Module</div>
+      <h3>{active}</h3>
+      <p>Modul ini tersedia sebagai shell operasional dan tetap sinkron dengan data realtime utama.</p>
     </section>
   );
 }
 
 export default function App() {
   const [active, setActive] = useState("Dashboard");
-  const [acknowledged, setAcknowledged] = useState(false);
+  const [overlayMinimized, setOverlayMinimized] = useState(false);
   const { data, mode } = useRealtime();
   const detection = data?.detection;
   const activeAlert = data?.alerts?.[0];
@@ -167,48 +169,50 @@ export default function App() {
 
   const jumpEvacuation = () => {
     setActive("Evakuasi");
-    setAcknowledged(true);
     window.setTimeout(() => document.getElementById("evakuasi")?.scrollIntoView({ behavior: "smooth" }), 80);
   };
 
   return (
-    <div className="app-shell">
+    <div className="shell">
       <Sidebar active={active} onSelect={setActive} />
-      <main className="workspace">
-        <header className="topbar">
+      <main className="main-content">
+        <header className="top-header">
           <div>
-            <div className="eyebrow">Tsunami Geographic Intelligence System</div>
-            <h1>Command Center Pesisir Panjang</h1>
+            <div className="kicker">Tsunami Geographic Intelligence</div>
+            <h1>SIG Command Center</h1>
           </div>
-          <div className={`system-pill ${level.toLowerCase()}`}>{level} · {mode.toUpperCase()}</div>
+          <div className={`pill ${level.toLowerCase()}`}>{level} · {mode.toUpperCase()}</div>
         </header>
 
-        <CommandSummary detection={detection} mode={mode} />
-        <div className="metrics-grid">
+        <TopStatus detection={detection} mode={mode} />
+
+        <section className="metric-grid">
           <MetricCard label="Level Alert" value={level} helper={statusMeta[level].action} tone={level.toLowerCase()} />
-          <MetricCard label="Confidence" value={`${detection?.confidence ?? 0}%`} helper="Skor gabungan sensor dan intensitas" />
-          <MetricCard label="Sensor Validasi" value={`${detection?.confirmedSensors ?? 0}`} helper="Sensor valid dalam jendela konfirmasi" />
-          <MetricCard label="Sirine Aktif" value={`${data?.sirens?.filter((item) => item.active).length || 0}`} helper="Unit sirine dalam mode aktif" />
-        </div>
+          <MetricCard label="Confidence" value={`${detection?.confidence ?? 0}%`} helper="Skor gabungan sensor" />
+          <MetricCard label="Sensor Konfirmasi" value={`${detection?.confirmedSensors ?? 0}`} helper="Sensor valid di jendela konfirmasi" />
+          <MetricCard label="Sirine Aktif" value={`${data?.sirens?.filter((item) => item.active).length || 0}`} helper="Unit aktif saat ini" />
+        </section>
 
         {active === "Dashboard" ? (
-          <div className="dashboard-grid">
-            <div className="main-column">
+          <section className="dashboard-layout">
+            <div className="left-stack">
               <MapPanel data={data?.map} />
               <SensorTable sensors={detection?.sensors || []} />
             </div>
-            <ActionPanel snapshot={data} realtimeMode={mode} />
-          </div>
+            <OperationsRail snapshot={data} realtimeMode={mode} />
+          </section>
         ) : (
           <ModulePage active={active} snapshot={data} mode={mode} />
         )}
       </main>
+
       {detection?.level === "AWAS" && (
         <EmergencyOverlay
           detection={detection}
           activeAlert={activeAlert}
-          acknowledged={acknowledged}
-          onAcknowledge={() => setAcknowledged(true)}
+          minimized={overlayMinimized}
+          onClose={() => setOverlayMinimized(true)}
+          onExpand={() => setOverlayMinimized(false)}
           onJumpEvacuation={jumpEvacuation}
         />
       )}
